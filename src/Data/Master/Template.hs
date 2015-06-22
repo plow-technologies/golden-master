@@ -11,8 +11,16 @@
 {-# LANGUAGE RankNTypes #-}
 -- For functions to apply to records
 {-# LANGUAGE TypeFamilies #-}
+-- For Aeson serialization
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Data.Master.Template where
+
+import Data.Aeson
+import Data.Aeson.Types
+import Control.Monad
+import Control.Applicative ((<$>), (<|>))
 
 import Data.Vinyl.Core
 import Data.Vinyl.Functor
@@ -48,10 +56,32 @@ data TemplateLevel
  | Conjunction
  | Disjunction
 
+instance ToJSON TemplateLevel where
+  toJSON Atom = String "Atom"
+  toJSON Conjunction = String "Conjunction"
+  toJSON Disjunction = String "Disjunction"
+instance FromJSON TemplateLevel where
+  parseJSON (String tLevelStr) 
+    | tLevelStr == "Atom" = return Atom 
+    | tLevelStr == "Conjunction" = return Conjunction 
+    | tLevelStr == "Disjunction" = return Disjunction 
+    | otherwise = mzero
+  parseJSON _ = mzero
+
 -- Flag for whether a type is normalized or not
 data Normalization
   = Unnormalized
   | Normalized
+
+instance ToJSON Normalization where
+  toJSON Unnormalized = String "Unnormalized"
+  toJSON Normalized = String "Normalized"
+instance FromJSON Normalization where
+  parseJSON (String normStr) 
+    | normStr == "Unnormalized" = return Unnormalized
+    | normStr == "Normalized" = return Normalized
+    | otherwise = mzero
+  parseJSON _ = mzero
 
 -- When recurring, do we enforce normalization or not?
 data TemplateFix (norm :: Normalization) (level :: TemplateLevel) (a :: *) where
@@ -115,3 +145,65 @@ distributeOrsAnd (Or andsLeft) (Or andsRight) = Or [FixLevel $ andAnds andLeft a
 andAnds :: Template norm Conjunction a -> Template norm Conjunction a -> Template norm Conjunction a
 andAnds (And leftFixes) (And rightFixes) = And $ leftFixes ++ rightFixes
  
+
+
+data TemplateBox a = forall level. TemplateBox { unTemplateBox :: Template Unnormalized level a }
+
+data TemplateFixBox a = forall level. TemplateFixBox { unTemplateFixBox :: TemplateFix Unnormalized level a}
+
+instance (ToJSON a) => ToJSON (TemplateFixBox a) where
+  toJSON (TemplateFixBox (FixAny template)) = toJSON $ TemplateBox template
+
+instance (ToJSON a) => ToJSON (TemplateBox a) where
+  toJSON (TemplateBox Meh) = String "Meh"
+  toJSON (TemplateBox (Eq val)) = object ["Eq" .= val]
+  toJSON (TemplateBox (Not t)) = object ["Not" .= TemplateFixBox t]
+  toJSON (TemplateBox (Lt val)) = object ["Lt" .= val]
+  toJSON (TemplateBox (Gt val)) = object ["Gt" .= val]
+  toJSON (TemplateBox (In xs)) = object ["In" .= xs]
+  toJSON (TemplateBox (And ts)) = object ["And" .= fmap TemplateFixBox ts]
+  toJSON (TemplateBox (Or ts)) = object ["Or" .= fmap TemplateFixBox ts]
+
+instance (FromJSON a, Eq a, Ord a) => FromJSON (TemplateBox a) where
+  parseJSON o = parseEq o <|> parseNot o <|> parseLt o
+            <|> parseGt o <|> parseIn o <|> parseAnd o
+            <|> parseOr o <|> parseMeh o
+
+parseEq, parseNot, parseLt, parseGt, 
+  parseIn, parseAnd, parseOr, parseMeh :: (FromJSON a, Ord a, Eq a) => Value -> Parser (TemplateBox a)
+parseEq (Object o) = do
+  value <- (o .: "Eq")
+  return $ TemplateBox $ Or [FixAny $ Eq value]
+parseEq _ = mzero
+parseNot (Object o) = do
+  (TemplateBox template) <- o .: "Not"
+  return $ TemplateBox $ Not $ FixAny $ template
+parseNot _ = mzero
+parseLt (Object o) = do
+  value <- o .: "Lt"
+  return $ TemplateBox $ Or [FixAny $ Lt value]
+parseLt _ = mzero
+parseGt (Object o) = do
+  value <- o .: "Gt"
+  return $ TemplateBox $ Or [FixAny $ Gt value]
+parseGt _ = mzero
+parseIn (Object o) = do
+  xs <- o .: "In"
+  return $ TemplateBox $ Or [FixAny $ In xs]
+parseIn _ = mzero
+parseAnd (Object o) = do
+  xs <- o .: "And"
+  return $ TemplateBox $ And $ ripTemplates xs FixAny
+parseAnd _ = mzero
+parseOr (Object o) = do
+  xs <- o .: "Or"
+  return $ TemplateBox $ Or $ ripTemplates xs FixAny
+parseOr _ = mzero
+parseMeh obj
+  | obj == (String "Meh") = return $ TemplateBox Meh
+  | otherwise = mzero
+
+
+ripTemplates :: [TemplateBox a] -> (forall level. Template Unnormalized level a -> k) -> [k]
+ripTemplates [] _ = []
+ripTemplates ((TemplateBox t):ts) f = (f t):(ripTemplates ts f)
