@@ -149,6 +149,10 @@ andAnds (And leftFixes) (And rightFixes) = And $ leftFixes ++ rightFixes
 
 data TemplateBox a = forall level. TemplateBox { unTemplateBox :: Template Unnormalized level a }
 
+data TemplateFixBox a = forall level. TemplateFixBox { unTemplateFixBox :: TemplateFix Unnormalized level a}
+
+instance (ToJSON a) => ToJSON (TemplateFixBox a) where
+  toJSON (TemplateFixBox (FixAny template)) = toJSON $ TemplateBox template
 
 instance (ToJSON a) => ToJSON (TemplateBox a) where
   toJSON (TemplateBox Meh) = String "Meh"
@@ -203,12 +207,3 @@ parseMeh obj
 ripTemplates :: [TemplateBox a] -> (forall level. Template Unnormalized level a -> k) -> [k]
 ripTemplates [] _ = []
 ripTemplates ((TemplateBox t):ts) f = (f t):(ripTemplates ts f)
-
--- someFunction :: forall level. TemplateBox a -> Template Unnormalized level a
--- someFunction (TemplateBox t) = t
-
-
-data TemplateFixBox a = forall level. TemplateFixBox { unTemplateFixBox :: TemplateFix Unnormalized level a}
-
-instance (ToJSON a) => ToJSON (TemplateFixBox a) where
-  toJSON (TemplateFixBox (FixAny template)) = toJSON $ TemplateBox template
