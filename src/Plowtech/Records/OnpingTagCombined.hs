@@ -16,6 +16,7 @@ import GHC.TypeLits
 
 
 data Location = Location -- For prototyping fun
+  deriving (Show)
 
 type family OnpingTagCombinedField (field :: Symbol) where
   OnpingTagCombinedField "location_id"        = Maybe Int
@@ -70,3 +71,20 @@ type OnpingTagCombined = Rec OnpingTagCombinedAttr OnpingTagCombinedFields
 type OnpingTagCombinedTemplate = Rec (TemplatesFor Normalized Disjunction OnpingTagCombinedAttr) OnpingTagCombinedFields
 
 
+testOnpingTagCombined :: OnpingTagCombined
+testOnpingTagCombined = (OnpingTagCombinedAttr $ Just 4)
+                    :&  (OnpingTagCombinedAttr Nothing)
+                    :&  (OnpingTagCombinedAttr Nothing)
+                    :&  (OnpingTagCombinedAttr Nothing)
+                    :&  (OnpingTagCombinedAttr Nothing)
+                    :&  (OnpingTagCombinedAttr Nothing)
+                    :&  (OnpingTagCombinedAttr Nothing)
+                    :&  (OnpingTagCombinedAttr Nothing)
+                    :&  (OnpingTagCombinedAttr Nothing)
+                    :&  (OnpingTagCombinedAttr Nothing)
+                    :&  (OnpingTagCombinedAttr Nothing)
+                    :&  (OnpingTagCombinedAttr Nothing)
+                    :&  (OnpingTagCombinedAttr Nothing)
+                    :&  (OnpingTagCombinedAttr Nothing)
+                    :&  (OnpingTagCombinedAttr Nothing)
+                    :&  (OnpingTagCombinedAttr Nothing) :& RNil
