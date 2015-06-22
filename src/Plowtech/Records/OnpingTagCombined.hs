@@ -7,7 +7,9 @@
 {-# LANGUAGE TypeFamilies #-}
 module Plowtech.Records.OnpingTagCombined where
 
+import Control.Applicative
 import Control.Lens.TH
+import Data.Aeson
 import Data.Master.Template
 import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
@@ -44,6 +46,12 @@ deriving instance (Bounded (OnpingTagCombinedField field)) => Bounded (OnpingTag
 instance (Enum (OnpingTagCombinedField field)) => Enum (OnpingTagCombinedAttr field) where
   fromEnum = fromEnum . _onpingTagCombinedAttr
   toEnum = OnpingTagCombinedAttr . toEnum
+
+instance (ToJSON (OnpingTagCombinedField field)) => ToJSON (OnpingTagCombinedAttr field) where
+  toJSON = toJSON . _onpingTagCombinedAttr
+
+instance (FromJSON (OnpingTagCombinedField field)) => FromJSON (OnpingTagCombinedAttr field) where
+  parseJSON value = OnpingTagCombinedAttr <$> parseJSON value
 
 makeLenses ''OnpingTagCombinedAttr
 
