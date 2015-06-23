@@ -4,7 +4,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE PolyKinds #-}
-module Data.Vinyl.Aeson where
+module Data.Vinyl.Aeson (recordFromJSON, recordToJSON, KnownSymbols) where
 
 import Data.Aeson
 import Data.Aeson.Types
@@ -55,9 +55,11 @@ fieldParserRecord = reifyProxyDict proxyRecord
 parseWithProxy :: (FromJSON a) => Proxy a -> Value -> Parser a
 parseWithProxy _ value = parseJSON value
 
+-- | Combine parallel records into a record of pairs
 rzip :: Rec f fields -> Rec g fields -> Rec (Lift (,) f g) fields
 rzip f g = rapply (rmap (\x -> Lift (\y -> Lift (x, y))) f) g
 
+-- | Parse a record from a JSON object, where the fields give object field names and field types give parsers
 recordFromJSON :: (RecAll f fields FromJSON, KnownSymbols fields, RecApplicative fields) => Value -> Parser (Rec f fields)
 recordFromJSON value = 
     rtraverse
@@ -70,6 +72,7 @@ recordFromJSON value =
               value)
   $ rzip fieldParserRecord fieldNameRecord
 
+-- | Serialize a record to a JSON object, where the fields give object field names and field types give serializers
 recordToJSON :: (RecAll f fields ToJSON, KnownSymbols fields, RecApplicative fields) => Rec f fields -> Value
 recordToJSON rec = 
     object 
