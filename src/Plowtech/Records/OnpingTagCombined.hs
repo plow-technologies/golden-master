@@ -5,6 +5,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Plowtech.Records.OnpingTagCombined where
 
 import Control.Applicative
@@ -14,11 +15,25 @@ import Data.Master.Template
 import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
 import Data.Vinyl
+import Data.Vinyl.Functor (Compose(..))
 import GHC.TypeLits
 
 
 data Location = Location -- For prototyping fun
-  deriving (Show)
+  deriving (Show, Eq, Ord)
+
+instance ToJSON Location where
+  toJSON Location = object [ "location" .= ("location" :: Text) ]
+
+instance FromJSON Location where
+  parseJSON val = withObject "Location must be object" (\obj -> (const Location :: Text -> Location) <$> obj .: "location") val
+
+
+instance (ToJSON (f (g x))) => ToJSON (Compose f g x) where
+  toJSON (Compose x) = toJSON x
+
+instance (FromJSON (f (g x))) => FromJSON (Compose f g x) where
+  parseJSON = (Compose <$>) . parseJSON
 
 type family OnpingTagCombinedField (field :: Symbol) where
   OnpingTagCombinedField "location_id"        = Maybe Int
