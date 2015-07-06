@@ -22,12 +22,12 @@ library
                        Plowtech.Records.OnpingTagCombined
                        Plowtech.Service.Types
   -- other-modules:       
-  build-depends:       base >=4.7 && <4.8
+  build-depends:       base >=4.7 && <4.9
                      , vinyl >= 0.5 && < 0.6
                      , aeson == 0.8.0.2
                      , lens
                      , text >= 1.2  && < 1.3
-                     , time >= 1.4 && < 1.5
+                     , time >= 1.3 && < 1.5
                      , aeson == 0.8.0.2
                      , servant >= 0.4 && < 0.5
                      , either >= 4.4 && < 4.5
@@ -37,7 +37,7 @@ library
   default-language:    Haskell2010
 
 executable onping-tag-combined-validator
-  build-depends:       base >= 4.7 && < 4.8
+  build-depends:       base >= 4.7 && < 4.9
                      , vinyl >= 0.5 && < 0.6
                      , aeson == 0.8.0.2
                      , lens
