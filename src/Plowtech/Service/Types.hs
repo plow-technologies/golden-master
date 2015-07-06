@@ -21,10 +21,17 @@ import Data.Serialize hiding (encode, decode, Get)
 import Data.Text (Text)
 import Data.Vinyl
 import Data.Vinyl.Aeson
-import Data.Vinyl.Functor (Const(..), Identity(..))
+import Data.Vinyl.Lens
+import Data.Vinyl.Functor (Const(..), Identity(..), Compose(..))
 import GHC.TypeLits
 import Plowtech.Records.OnpingTagCombined
 import Servant.API
+import Data.Vinyl.TypeLevel
+import Data.Master.Template
+
+
+instance (Eq (f (g x))) => Eq (Compose f g x) where
+  (Compose a) == (Compose b) = a == b
 
 -- | A newtype for JSON-encoding OnpingTagCombined records
 newtype OnpingTagCombinedJSON = OnpingTagCombinedJSON { _onpingTagCombinedJSON :: OnpingTagCombined }
@@ -52,6 +59,32 @@ makeLenses ''NamedJSON
 -- | A newtype for JSON-encoding OnpingTagCombinedTemplate records
 newtype OnpingTagCombinedTemplateJSON = OnpingTagCombinedTemplateJSON { _onpingTagCombinedTemplateJSON :: OnpingTagCombinedTemplate }
 
+instance Eq OnpingTagCombinedTemplateJSON where
+  (OnpingTagCombinedTemplateJSON a) == (OnpingTagCombinedTemplateJSON b) = (eqReqOn (Proxy :: Proxy "location_id") a b)
+                                                                        && (eqReqOn (Proxy :: Proxy "slave_parameter_id") a b)
+                                                                        && (eqReqOn (Proxy :: Proxy "parameter_tag_id") a b)
+                                                                        && (eqReqOn (Proxy :: Proxy "description") a b)
+                                                                        && (eqReqOn (Proxy :: Proxy "unit_id") a b)
+                                                                        && (eqReqOn (Proxy :: Proxy "status_active") a b)
+                                                                        && (eqReqOn (Proxy :: Proxy "status_writable") a b)
+                                                                        && (eqReqOn (Proxy :: Proxy "last_update") a b)
+                                                                        && (eqReqOn (Proxy :: Proxy "result") a b)
+                                                                        && (eqReqOn (Proxy :: Proxy "validation_code") a b)
+                                                                        && (eqReqOn (Proxy :: Proxy "permissions") a b)
+                                                                        && (eqReqOn (Proxy :: Proxy "delete") a b)
+                                                                        && (eqReqOn (Proxy :: Proxy "companyIdRef") a b)
+                                                                        && (eqReqOn (Proxy :: Proxy "siteIdRef") a b)
+                                                                        && (eqReqOn (Proxy :: Proxy "location") a b)
+                                                                        && (eqReqOn (Proxy :: Proxy "pid") a b)
+
+
+
+eqReqOn :: (RElem r OnpingTagCombinedFields (RIndex r OnpingTagCombinedFields), RElem r OnpingTagCombinedFields (RIndex r OnpingTagCombinedFields), (Eq (OnpingTagCombinedField r))) 
+    => sing r 
+    -> Rec (TemplatesFor Normalized Disjunction OnpingTagCombinedAttr) OnpingTagCombinedFields 
+    -> Rec (TemplatesFor Normalized Disjunction OnpingTagCombinedAttr) OnpingTagCombinedFields -> Bool
+eqReqOn rl template1 template2 = (getCompose $ template1 ^. (rlens rl)) == (getCompose $ template2 ^. (rlens rl))
+
 makeLenses ''OnpingTagCombinedTemplateJSON
 
 -- | The Servant API for validation
@@ -60,7 +93,7 @@ type OnpingTagCombinedValidatorAPI =
   :<|> "templates" :> ReqBody '[JSON] (NamedJSON OnpingTagCombinedTemplateJSON) :> Post '[JSON] ()
   :<|> "templates" :> Capture "name" Text :> Get '[JSON] OnpingTagCombinedTemplateJSON
   :<|> "validate"  :> Capture "name" Text :> ReqBody '[JSON] OnpingTagCombinedJSON :> Post '[JSON] Bool
-
+  :<|>  Raw
 
 instance ToJSON OnpingTagCombinedJSON where
   toJSON = recordToJSON . _onpingTagCombinedJSON
@@ -89,3 +122,7 @@ instance (FromJSON (NamedField a field)) => FromJSON (NamedAttr a field) where
 instance (FromJSON a, ToJSON a) => Serialize (NamedJSON a) where
   put = put . encode
   get = get >>= maybe mzero return . decode
+
+-- | The proxy for the validation Servant API type
+onpingTagCombinedValidatorAPI :: Proxy OnpingTagCombinedValidatorAPI
+onpingTagCombinedValidatorAPI = Proxy
