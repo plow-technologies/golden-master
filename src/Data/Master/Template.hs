@@ -85,6 +85,25 @@ data TemplateFix (norm :: Normalization) (level :: TemplateLevel) (a :: *) where
   FixAny   :: Template Unnormalized level' a -> TemplateFix Unnormalized level a
   FixLevel :: Template Normalized level a    -> TemplateFix Normalized level a
 
+instance (Eq a) => Eq (TemplateFix norm level a) where
+  (==) = eqFixHelper
+
+eqFixHelper :: (Eq a) => TemplateFix norm level a -> TemplateFix norm level' a -> Bool
+eqFixHelper (FixAny a) (FixAny b) = eqHelper a b
+eqFixHelper (FixLevel a) (FixLevel b) = eqHelper a b
+eqFixHelper _ _ = False
+
+eqHelper :: (Eq a) => Template norm level' a -> Template norm level a -> Bool
+eqHelper Meh Meh = True
+eqHelper (Not a) (Not b) = a == b
+eqHelper (Eq a) (Eq b) = a == b
+eqHelper (Lt a) (Lt b) = a == b
+eqHelper (Gt a) (Gt b) = a == b
+eqHelper (In a) (In b) = a == b
+eqHelper (And a) (And b) = a == b
+eqHelper (Or a) (Or b) = a == b
+eqHelper _ _ = False
+
 -- | Templates
 data Template (norm :: Normalization) (level :: TemplateLevel) (a :: *) where
   Meh ::                                       Template norm level a
@@ -95,6 +114,10 @@ data Template (norm :: Normalization) (level :: TemplateLevel) (a :: *) where
   In  :: (Eq a)  => [a]                     -> Template norm Atom a
   And :: [TemplateFix norm Atom a]        -> Template norm Conjunction a
   Or  :: [TemplateFix norm Conjunction a] -> Template norm Disjunction a
+
+instance (Eq a) => Eq (Template norm level a) where
+  (==) = eqHelper
+
 
 -- | Convert a constraint from unnormalized form to normal form
 compileTemplate :: Template Unnormalized level a -> Template Normalized Disjunction a

@@ -53,7 +53,8 @@ type family OnpingTagCombinedField (field :: Symbol) where
   OnpingTagCombinedField "location"           = Maybe Location
   OnpingTagCombinedField "pid"                = Maybe Int
 
-newtype OnpingTagCombinedAttr (field :: Symbol) = OnpingTagCombinedAttr { _onpingTagCombinedAttr :: OnpingTagCombinedField field } 
+
+newtype OnpingTagCombinedAttr (field :: Symbol) = OnpingTagCombinedAttr { _onpingTagCombinedAttr :: OnpingTagCombinedField field }
 deriving instance (Eq (OnpingTagCombinedField field)) => Eq (OnpingTagCombinedAttr field)
 deriving instance (Ord (OnpingTagCombinedField field)) => Ord (OnpingTagCombinedAttr field)
 deriving instance (Show (OnpingTagCombinedField field)) => Show (OnpingTagCombinedAttr field)
@@ -111,3 +112,21 @@ testOnpingTagCombined = (OnpingTagCombinedAttr $ Just 4)
                     :&  (OnpingTagCombinedAttr Nothing)
                     :&  (OnpingTagCombinedAttr Nothing)
                     :&  (OnpingTagCombinedAttr Nothing) :& RNil
+
+template :: OnpingTagCombinedTemplate
+template = (Compose Meh)
+        :& (Compose Meh)
+        :& (Compose Meh)
+        :& (Compose Meh)
+        :& (Compose Meh)
+        :& (Compose Meh)
+        :& (Compose Meh)
+        :& (Compose Meh)
+        :& (Compose Meh)
+        :& (Compose Meh)
+        :& (Compose Meh)
+        :& (Compose Meh)
+        :& (Compose Meh)
+        :& (Compose Meh)
+        :& (Compose Meh)
+        :& (Compose Meh) :& RNil
