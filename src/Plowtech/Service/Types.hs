@@ -5,6 +5,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeOperators #-}
 module Plowtech.Service.Types where
 
@@ -45,6 +46,7 @@ type family NamedField a (field :: Symbol) where
 
 -- | Attribute type for the Named record
 newtype NamedAttr a (field :: Symbol) = NamedAttr { _namedAttr :: NamedField a field }
+deriving instance (Eq (NamedField a field)) => Eq (NamedAttr a field)
 
 makeLenses ''NamedAttr
 
@@ -53,6 +55,7 @@ type Named a = Rec (NamedAttr a) '["name", "record"]
 
 -- | A newtype for JSON-encoding Named records
 newtype NamedJSON a = NamedJSON { _namedJSON :: Named a }
+deriving instance (Eq (Named a)) => Eq (NamedJSON a)
 
 makeLenses ''NamedJSON
 

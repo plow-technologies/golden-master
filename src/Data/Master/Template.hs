@@ -132,7 +132,7 @@ compileTemplate (Eq x)                = Or [FixLevel $ And [FixLevel $ Eq x]]
 compileTemplate (Lt x)                = Or [FixLevel $ And [FixLevel $ Lt x]]
 compileTemplate (Gt x)                = Or [FixLevel $ And [FixLevel $ Gt x]]
 compileTemplate (In x)                = Or [FixLevel $ And [FixLevel $ In x]]
-compileTemplate (And fixes)           = foldr distributeOrsAnd (Or []) $ map (unFixAny compileTemplate) fixes  
+compileTemplate (And fixes)           = foldr distributeOrsAnd (Or [FixLevel $ And [FixLevel Meh]]) $ map (unFixAny compileTemplate) fixes  
 compileTemplate (Or fixes)            = Or $ concatMap (unFixAny $ unOr . compileTemplate) fixes
 
 -- | Push 'Nots' out to leaves
