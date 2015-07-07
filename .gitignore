@@ -9,3 +9,10 @@ template-store/
 .cabal-sandbox/
 cabal.sandbox.config
 dist/
+cabal-dev
+*.o
+*.chi
+*.chs.h
+.virthualenv
+.hsenv
+static/
