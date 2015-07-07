@@ -4,9 +4,8 @@
 *.o
 *.js_o
 *.jsexe
-.fuse_hidden*
-*~
-\#*
-.#*
-template-store/
+template-store
 *.zip
+.cabal-sandbox/
+cabal.sandbox.config
+dist/
