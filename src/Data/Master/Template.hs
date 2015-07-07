@@ -161,9 +161,15 @@ unFixLevel (FixLevel c) = c
 -- | Distribute a conjunction of disjunctions of conjunctions to obtain a disjunction of conjunctions
 distributeOrsAnd :: Template Normalized Disjunction a -> Template Normalized Disjunction a -> Template Normalized Disjunction a
 distributeOrsAnd (Or andsLeft) (Or andsRight) = Or [FixLevel $ andAnds andLeft andRight | (FixLevel andLeft) <- andsLeft, (FixLevel andRight) <- andsRight]
+distributeOrsAnd Meh (Or andsRight) = Or andsRight
+distributeOrsAnd (Or andsLeft) Meh = Or andsLeft
+distributeOrsAnd Meh Meh = Meh
 
-andAnds :: Template norm Conjunction a -> Template norm Conjunction a -> Template norm Conjunction a
+andAnds :: Template Normalized Conjunction a -> Template Normalized Conjunction a -> Template Normalized Conjunction a
 andAnds (And leftFixes) (And rightFixes) = And $ leftFixes ++ rightFixes
+andAnds Meh (And rightFixes) = And rightFixes
+andAnds (And leftFixes) Meh = And leftFixes
+andAnds Meh Meh = Meh
 
 weakenTemplate :: Template norm level a -> TemplateBox a
 weakenTemplate Meh = TemplateBox Meh
