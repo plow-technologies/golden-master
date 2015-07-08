@@ -15,7 +15,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
-
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Data.Master.Template
   (
     TemplateLevel(..)
@@ -37,10 +38,24 @@ import Data.Aeson
 import Data.Aeson.Types
 import Control.Monad
 import Control.Applicative ((<$>), (<|>))
+import qualified Control.Lens as L
 
 import Data.Vinyl.Core
 import Data.Vinyl.Functor
 import GHC.TypeLits
+
+-- | Take apart an or
+unOr :: Template Normalized Disjunction a -> [TemplateFix Normalized Conjunction a]
+unOr (Or fixes) = fixes
+
+-- | Take apart the existential 'FixAny' that permits violation of normalization constraints
+unFixAny :: (forall level' . Template Unnormalized level' a -> k) -> TemplateFix Unnormalized level a -> k
+unFixAny existentialKont (FixAny constraint) = existentialKont constraint
+
+-- | Take apart the 'FixLevel that prevents violation of normalization constraints
+unFixLevel :: TemplateFix Normalized level a -> Template Normalized level a
+unFixLevel (FixLevel c) = c
+
 
 -- | Functor transformer for template records
 type TemplatesFor norm level (f :: u -> *) = Compose (Template norm level) f
@@ -85,6 +100,17 @@ data TemplateFix (norm :: Normalization) (level :: TemplateLevel) (a :: *) where
   FixAny   :: Template Unnormalized level' a -> TemplateFix Unnormalized level a
   FixLevel :: Template Normalized level a    -> TemplateFix Normalized level a
 
+
+-- _TemplateFix :: L.Lens' (TemplateFix Unnormalized level a) (Template Unnormalized level a)
+-- _FixAny :: L.Prism' (TemplateFix Unnormalized level a) (Template Unnormalized level' a)
+-- _FixAny = L.prism' FixAny (unFixAny Just)
+--   where ripFixAny :: TemplateFix Unnormalized level a -> Template Unnormalized level' a
+--         ripFixAny ts@(FixAny t) = Just $ unFixAny id ts
+--         ripFixAny _ = Nothing
+
+_TemplateFix :: L.Iso' (TemplateFix Normalized level a) (Template Normalized level a)
+_TemplateFix = L.iso unFixLevel FixLevel
+
 instance (Eq a) => Eq (TemplateFix norm level a) where
   (==) = eqFixHelper
 
@@ -114,6 +140,9 @@ data Template (norm :: Normalization) (level :: TemplateLevel) (a :: *) where
   In  :: (Eq a)  => [a]                     -> Template norm Atom a
   And :: [TemplateFix norm Atom a]        -> Template norm Conjunction a
   Or  :: [TemplateFix norm Conjunction a] -> Template norm Disjunction a
+
+-- L.makePrisms ''Template
+
 
 instance (Eq a) => Eq (Template norm level a) where
   (==) = eqHelper
@@ -145,18 +174,6 @@ pushDownNots k (Gt x)           = k $ Not $ FixAny $ Gt x
 pushDownNots k (In x)           = k $ Not $ FixAny $ In x
 pushDownNots k (And fixes)      = k $ Or $ map (unFixAny $ pushDownNots FixAny) fixes
 pushDownNots k (Or fixes)       = k $ And $ map (unFixAny $ pushDownNots FixAny) fixes
-
--- | Take apart an or
-unOr :: Template Normalized Disjunction a -> [TemplateFix Normalized Conjunction a]
-unOr (Or fixes) = fixes
-
--- | Take apart the existential 'FixAny' that permits violation of normalization constraints
-unFixAny :: (forall level' . Template Unnormalized level' a -> k) -> TemplateFix Unnormalized level a -> k
-unFixAny existentialKont (FixAny constraint) = existentialKont constraint
-
--- | Take apart the 'FixLevel that prevents violation of normalization constraints
-unFixLevel :: TemplateFix Normalized level a -> Template Normalized level a
-unFixLevel (FixLevel c) = c
 
 -- | Distribute a conjunction of disjunctions of conjunctions to obtain a disjunction of conjunctions
 distributeOrsAnd :: Template Normalized Disjunction a -> Template Normalized Disjunction a -> Template Normalized Disjunction a
@@ -257,3 +274,69 @@ parseMeh _ = mzero
 ripTemplates :: [TemplateBox a] -> (forall level. Template Unnormalized level a -> k) -> [k]
 ripTemplates [] _ = []
 ripTemplates ((TemplateBox t):ts) f = (f t):(ripTemplates ts f)
+
+
+-- templateOr :: L.Prism' (Template Unnormalized Disjunction a) [Template Unnormalized Conjunction a]
+-- templateOr = L.prism' (\xs -> Or (FixAny <$> xs)) matchOr
+--   where matchOr (Or ts) = Just ts
+                              
+-- -- prism' :: (a -> s) -> (s -> Maybe a) -> Prism' s a
+
+-- _Or :: (level ~ Disjunction) => forall level'. L.Prism' (Template Unnormalized level a) [TemplateFix norm Conjunction a]
+-- _Or = L.prism' (\xs -> Or xs) undefined
+--   where figureItOut (Or ts) = Just $ ts
+--         figureItOut _ = Nothing
+
+
+
+--   Or  :: [TemplateFix norm Conjunction a] -> Template norm Disjunction a
+
+_Or :: L.Prism' (Template norm Disjunction a) [TemplateFix norm Conjunction a]
+_Or = L.prism' Or ripOr
+  where ripOr :: Template norm level a -> Maybe [TemplateFix norm Conjunction a]
+        ripOr (Or xs) = Just xs
+        ripOr _ = Nothing
+
+
+--   And :: [TemplateFix norm Atom a]        -> Template norm Conjunction a
+_And :: L.Prism' (Template norm Conjunction a) [TemplateFix norm Atom a]
+_And = L.prism' And ripAnd
+  where ripAnd :: Template norm level a -> Maybe  [TemplateFix norm Atom a]
+        ripAnd (And xs) = Just xs
+        ripAnd _ = Nothing
+
+
+-- Not :: TemplateFix norm Atom a          -> Template norm Atom a
+_Not :: L.Prism' (Template norm Atom a) (TemplateFix norm Atom a)
+_Not = L.prism' Not ripNot
+  where ripNot :: (Template norm level a) -> Maybe (TemplateFix norm Atom a)
+        ripNot (Not t) = Just t
+        ripNot _ = Nothing
+
+-- Eq  :: (Eq a)  => a                       -> Template norm Atom a
+_Eq :: (Eq a) => L.Prism' (Template norm Atom a) a
+_Eq = L.prism' Eq ripEq
+  where ripEq :: (Template norm level a) -> Maybe a
+        ripEq (Eq v) = Just v
+        ripEq _ = Nothing
+
+-- Lt  :: (Ord a) => a                       -> Template norm Atom a
+_Lt :: (Ord a) => L.Prism' (Template norm Atom a) a
+_Lt = L.prism' Lt ripLt
+  where ripLt :: (Template norm level a) -> Maybe a
+        ripLt (Lt v) = Just v
+        ripLt _ = Nothing
+
+-- Gt  :: (Ord a) => a                       -> Template norm Atom a
+_Gt :: (Ord a) => L.Prism' (Template norm Atom a) a
+_Gt = L.prism' Lt ripGt
+  where ripGt :: (Template norm level a) -> Maybe a
+        ripGt (Gt v) = Just v
+        ripGt _ = Nothing
+
+-- In  :: (Eq a)  => [a]                     -> Template norm Atom a
+_In :: (Eq a) => L.Prism' (Template norm Atom a) [a]
+_In = L.prism' In ripIn
+  where ripIn :: (Template norm level a) -> Maybe [a]
+        ripIn (In xs) = Just xs
+        ripIn _ = Nothing
