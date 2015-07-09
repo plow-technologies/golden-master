@@ -31,6 +31,14 @@ module Data.Master.Template
   , checkTemplate
   , checkTemplates
   , unFixLevel
+  , _Or
+  , _And
+  , _Gt
+  , _Lt
+  , _Not
+  , _Eq
+  , _In
+  , _TemplateFix
   )
 where
 
@@ -291,52 +299,52 @@ ripTemplates ((TemplateBox t):ts) f = (f t):(ripTemplates ts f)
 
 --   Or  :: [TemplateFix norm Conjunction a] -> Template norm Disjunction a
 
-_Or :: L.Prism' (Template norm Disjunction a) [TemplateFix norm Conjunction a]
+_Or :: L.Prism' (Template Normalized Disjunction a) [TemplateFix Normalized Conjunction a]
 _Or = L.prism' Or ripOr
-  where ripOr :: Template norm level a -> Maybe [TemplateFix norm Conjunction a]
+  where ripOr :: Template Normalized level a -> Maybe [TemplateFix Normalized Conjunction a]
         ripOr (Or xs) = Just xs
         ripOr _ = Nothing
 
 
---   And :: [TemplateFix norm Atom a]        -> Template norm Conjunction a
-_And :: L.Prism' (Template norm Conjunction a) [TemplateFix norm Atom a]
+--   And :: [TemplateFix Normalized Atom a]        -> Template Normalized Conjunction a
+_And :: L.Prism' (Template Normalized Conjunction a) [TemplateFix Normalized Atom a]
 _And = L.prism' And ripAnd
-  where ripAnd :: Template norm level a -> Maybe  [TemplateFix norm Atom a]
+  where ripAnd :: Template Normalized level a -> Maybe  [TemplateFix Normalized Atom a]
         ripAnd (And xs) = Just xs
         ripAnd _ = Nothing
 
 
--- Not :: TemplateFix norm Atom a          -> Template norm Atom a
-_Not :: L.Prism' (Template norm Atom a) (TemplateFix norm Atom a)
+-- Not :: TemplateFix Normalized Atom a          -> Template Normalized Atom a
+_Not :: L.Prism' (Template Normalized Atom a) (TemplateFix Normalized Atom a)
 _Not = L.prism' Not ripNot
-  where ripNot :: (Template norm level a) -> Maybe (TemplateFix norm Atom a)
+  where ripNot :: (Template Normalized level a) -> Maybe (TemplateFix Normalized Atom a)
         ripNot (Not t) = Just t
         ripNot _ = Nothing
 
--- Eq  :: (Eq a)  => a                       -> Template norm Atom a
-_Eq :: (Eq a) => L.Prism' (Template norm Atom a) a
+-- Eq  :: (Eq a)  => a                       -> Template Normalized Atom a
+_Eq :: (Eq a) => L.Prism' (Template Normalized Atom a) a
 _Eq = L.prism' Eq ripEq
-  where ripEq :: (Template norm level a) -> Maybe a
+  where ripEq :: (Template Normalized level a) -> Maybe a
         ripEq (Eq v) = Just v
         ripEq _ = Nothing
 
--- Lt  :: (Ord a) => a                       -> Template norm Atom a
-_Lt :: (Ord a) => L.Prism' (Template norm Atom a) a
+-- Lt  :: (Ord a) => a                       -> Template Normalized Atom a
+_Lt :: (Ord a) => L.Prism' (Template Normalized Atom a) a
 _Lt = L.prism' Lt ripLt
-  where ripLt :: (Template norm level a) -> Maybe a
+  where ripLt :: (Template Normalized level a) -> Maybe a
         ripLt (Lt v) = Just v
         ripLt _ = Nothing
 
--- Gt  :: (Ord a) => a                       -> Template norm Atom a
-_Gt :: (Ord a) => L.Prism' (Template norm Atom a) a
+-- Gt  :: (Ord a) => a                       -> Template Normalized Atom a
+_Gt :: (Ord a) => L.Prism' (Template Normalized Atom a) a
 _Gt = L.prism' Lt ripGt
-  where ripGt :: (Template norm level a) -> Maybe a
+  where ripGt :: (Template Normalized level a) -> Maybe a
         ripGt (Gt v) = Just v
         ripGt _ = Nothing
 
--- In  :: (Eq a)  => [a]                     -> Template norm Atom a
-_In :: (Eq a) => L.Prism' (Template norm Atom a) [a]
+-- In  :: (Eq a)  => [a]                     -> Template Normalized Atom a
+_In :: (Eq a) => L.Prism' (Template Normalized Atom a) [a]
 _In = L.prism' In ripIn
-  where ripIn :: (Template norm level a) -> Maybe [a]
+  where ripIn :: (Template Normalized level a) -> Maybe [a]
         ripIn (In xs) = Just xs
         ripIn _ = Nothing
