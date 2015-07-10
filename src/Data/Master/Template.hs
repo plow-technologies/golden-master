@@ -19,18 +19,28 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Data.Master.Template
   (
+  -- * Data Kinds
     TemplateLevel(..)
   , Normalization(..)
+  
+  -- * Templating
   , Template(..)
   , TemplatesFor
   , TemplateFix(..)
+  , unFixLevel
   , TemplateBox()
   , weakenTemplate
   , compileTemplateBox
   , compileTemplate
   , checkTemplate
   , checkTemplates
-  , unFixLevel
+
+  -- * Lenses and prisms
+  , templateFixNormalized
+  , templateBox
+  , templateFixBox
+  , fixAnyLevelIso
+  , Fixable (..)
   , _Or
   , _And
   , _Gt
@@ -38,7 +48,6 @@ module Data.Master.Template
   , _Not
   , _Eq
   , _In
-  , _TemplateFix
   )
 where
 
@@ -108,16 +117,9 @@ data TemplateFix (norm :: Normalization) (level :: TemplateLevel) (a :: *) where
   FixAny   :: Template Unnormalized level' a -> TemplateFix Unnormalized level a
   FixLevel :: Template Normalized level a    -> TemplateFix Normalized level a
 
-
--- _TemplateFix :: L.Lens' (TemplateFix Unnormalized level a) (Template Unnormalized level a)
--- _FixAny :: L.Prism' (TemplateFix Unnormalized level a) (Template Unnormalized level' a)
--- _FixAny = L.prism' FixAny (unFixAny Just)
---   where ripFixAny :: TemplateFix Unnormalized level a -> Template Unnormalized level' a
---         ripFixAny ts@(FixAny t) = Just $ unFixAny id ts
---         ripFixAny _ = Nothing
-
-_TemplateFix :: L.Iso' (TemplateFix Normalized level a) (Template Normalized level a)
-_TemplateFix = L.iso unFixLevel FixLevel
+-- | Isomorphism between a Normalized fix and the contained template
+templateFixNormalized :: L.Iso' (TemplateFix Normalized level a) (Template Normalized level a)
+templateFixNormalized = L.iso unFixLevel FixLevel
 
 instance (Eq a) => Eq (TemplateFix norm level a) where
   (==) = eqFixHelper
@@ -148,9 +150,6 @@ data Template (norm :: Normalization) (level :: TemplateLevel) (a :: *) where
   In  :: (Eq a)  => [a]                     -> Template norm Atom a
   And :: [TemplateFix norm Atom a]        -> Template norm Conjunction a
   Or  :: [TemplateFix norm Conjunction a] -> Template norm Disjunction a
-
--- L.makePrisms ''Template
-
 
 instance (Eq a) => Eq (Template norm level a) where
   (==) = eqHelper
@@ -221,9 +220,16 @@ instance (ToJSON a) => ToJSON (Template Normalized Disjunction a) where
 instance (FromJSON a, Eq a, Ord a) => FromJSON (Template Normalized Disjunction a) where
   parseJSON = (compileTemplateBox <$>) . parseJSON
 
-data TemplateBox a = forall level. TemplateBox { unTemplateBox :: Template Unnormalized level a }
+data TemplateBox a = forall level. TemplateBox { _templateBox :: Template Unnormalized level a }
 
-data TemplateFixBox a = forall level. TemplateFixBox { unTemplateFixBox :: TemplateFix Unnormalized level a}
+-- | Isomorphism between a TemplateBox (used for encoding) and a TemplateFix Unnormalized (which can be deconstructed with prisms)
+templateBox :: L.Iso' (TemplateBox a) (TemplateFix Unnormalized level a)
+templateBox = L.iso (\(TemplateBox template) -> FixAny template) (\(FixAny template) -> TemplateBox template)
+
+data TemplateFixBox a = forall level. TemplateFixBox { _templateFixBox :: TemplateFix Unnormalized level a}
+
+templateFixBox :: L.Iso' (TemplateFixBox a) (TemplateFix Unnormalized level a)
+templateFixBox = L.iso (\(TemplateFixBox (FixAny template)) -> FixAny template) TemplateFixBox
 
 instance (ToJSON a) => ToJSON (TemplateFixBox a) where
   toJSON (TemplateFixBox (FixAny template)) = toJSON $ TemplateBox template
@@ -283,68 +289,78 @@ ripTemplates :: [TemplateBox a] -> (forall level. Template Unnormalized level a 
 ripTemplates [] _ = []
 ripTemplates ((TemplateBox t):ts) f = (f t):(ripTemplates ts f)
 
+-- | Necessary for the reconstruction side of prisms into TemplateBox.
+-- Simply propagate this constraint when using the prisms parametrically in the normalization variable.
+-- Instances are given for both cases.
+class Fixable (normalization :: Normalization) where
+  fixFunction :: Template normalization level a -> TemplateFix normalization level a
 
--- templateOr :: L.Prism' (Template Unnormalized Disjunction a) [Template Unnormalized Conjunction a]
--- templateOr = L.prism' (\xs -> Or (FixAny <$> xs)) matchOr
---   where matchOr (Or ts) = Just ts
-                              
--- -- prism' :: (a -> s) -> (s -> Maybe a) -> Prism' s a
+instance Fixable Normalized where
+  fixFunction = FixLevel
 
--- _Or :: (level ~ Disjunction) => forall level'. L.Prism' (Template Unnormalized level a) [TemplateFix norm Conjunction a]
--- _Or = L.prism' (\xs -> Or xs) undefined
---   where figureItOut (Or ts) = Just $ ts
---         figureItOut _ = Nothing
+instance Fixable Unnormalized where
+  fixFunction = FixAny
 
+-- | Isomorphism between TemplateFix unnormalized at differing levels. Use when applying a prism to Unnormalized boxes.
+fixAnyLevelIso :: L.Iso' (TemplateFix Unnormalized level1 a) (TemplateFix Unnormalized level2 a)
+fixAnyLevelIso = L.iso castFixAny castFixAny
+  where
+    castFixAny :: TemplateFix Unnormalized level1 a -> TemplateFix Unnormalized level2 a
+    castFixAny (FixAny template) = FixAny template
 
-
---   Or  :: [TemplateFix norm Conjunction a] -> Template norm Disjunction a
-
-_Or :: L.Prism' (Template Normalized Disjunction a) [TemplateFix Normalized Conjunction a]
-_Or = L.prism' Or ripOr
-  where ripOr :: Template Normalized level a -> Maybe [TemplateFix Normalized Conjunction a]
-        ripOr (Or xs) = Just xs
+-- | Prism for getting/setting disjunctive constraints
+_Or :: (Fixable normalization) => L.Prism' (TemplateFix normalization Disjunction a) [TemplateFix normalization Conjunction a]
+_Or = L.prism' (fixFunction . Or) ripOr
+  where ripOr :: TemplateFix normalization level a -> Maybe [TemplateFix normalization Conjunction a]
+        ripOr (FixAny (Or xs)) = Just xs
+        ripOr (FixLevel (Or xs)) = Just xs
         ripOr _ = Nothing
 
-
---   And :: [TemplateFix Normalized Atom a]        -> Template Normalized Conjunction a
-_And :: L.Prism' (Template Normalized Conjunction a) [TemplateFix Normalized Atom a]
-_And = L.prism' And ripAnd
-  where ripAnd :: Template Normalized level a -> Maybe  [TemplateFix Normalized Atom a]
-        ripAnd (And xs) = Just xs
+-- | Prism for getting/setting conjunctive constraints
+_And :: (Fixable normalization) => L.Prism' (TemplateFix normalization Conjunction a) [TemplateFix normalization Atom a]
+_And = L.prism' (fixFunction . And) ripAnd
+  where ripAnd :: TemplateFix normalization level a -> Maybe  [TemplateFix normalization Atom a]
+        ripAnd (FixAny (And xs)) = Just xs
+        ripAnd (FixLevel (And xs)) = Just xs
         ripAnd _ = Nothing
 
 
--- Not :: TemplateFix Normalized Atom a          -> Template Normalized Atom a
-_Not :: L.Prism' (Template Normalized Atom a) (TemplateFix Normalized Atom a)
-_Not = L.prism' Not ripNot
-  where ripNot :: (Template Normalized level a) -> Maybe (TemplateFix Normalized Atom a)
-        ripNot (Not t) = Just t
+-- | Prism for getting/setting inverted constraints
+_Not :: (Fixable normalization) => L.Prism' (TemplateFix normalization Atom a) (TemplateFix normalization Atom a)
+_Not = L.prism' (fixFunction . Not) ripNot
+  where ripNot :: (TemplateFix normalization level a) -> Maybe (TemplateFix normalization Atom a)
+        ripNot (FixAny (Not t)) = Just t
+        ripNot (FixLevel (Not t)) = Just t
         ripNot _ = Nothing
 
--- Eq  :: (Eq a)  => a                       -> Template Normalized Atom a
-_Eq :: (Eq a) => L.Prism' (Template Normalized Atom a) a
-_Eq = L.prism' Eq ripEq
-  where ripEq :: (Template Normalized level a) -> Maybe a
-        ripEq (Eq v) = Just v
+-- | Prism for getting/setting equality constraints
+_Eq :: (Fixable normalization, Eq a) => L.Prism' (TemplateFix normalization Atom a) a
+_Eq = L.prism' (fixFunction . Eq) ripEq
+  where ripEq :: (TemplateFix normalization level a) -> Maybe a
+        ripEq (FixAny (Eq v)) = Just v
+        ripEq (FixLevel (Eq v)) = Just v
         ripEq _ = Nothing
 
--- Lt  :: (Ord a) => a                       -> Template Normalized Atom a
-_Lt :: (Ord a) => L.Prism' (Template Normalized Atom a) a
-_Lt = L.prism' Lt ripLt
-  where ripLt :: (Template Normalized level a) -> Maybe a
-        ripLt (Lt v) = Just v
+-- | Prism for getting/setting less-than constraints
+_Lt :: (Fixable normalization, Ord a) => L.Prism' (TemplateFix normalization Atom a) a
+_Lt = L.prism' (fixFunction . Lt) ripLt
+  where ripLt :: (TemplateFix normalization level a) -> Maybe a
+        ripLt (FixAny (Lt v)) = Just v
+        ripLt (FixLevel (Lt v)) = Just v
         ripLt _ = Nothing
 
--- Gt  :: (Ord a) => a                       -> Template Normalized Atom a
-_Gt :: (Ord a) => L.Prism' (Template Normalized Atom a) a
-_Gt = L.prism' Lt ripGt
-  where ripGt :: (Template Normalized level a) -> Maybe a
-        ripGt (Gt v) = Just v
+-- | Prism for getting/setting greater-than constraints
+_Gt :: (Fixable normalization, Ord a) => L.Prism' (TemplateFix normalization Atom a) a
+_Gt = L.prism' (fixFunction . Lt) ripGt
+  where ripGt :: (TemplateFix normalization level a) -> Maybe a
+        ripGt (FixAny (Gt v)) = Just v
+        ripGt (FixLevel (Gt v)) = Just v
         ripGt _ = Nothing
 
--- In  :: (Eq a)  => [a]                     -> Template Normalized Atom a
-_In :: (Eq a) => L.Prism' (Template Normalized Atom a) [a]
-_In = L.prism' In ripIn
-  where ripIn :: (Template Normalized level a) -> Maybe [a]
-        ripIn (In xs) = Just xs
+-- | Prism for getting/setting set membership constraints
+_In :: (Fixable normalization, Eq a) => L.Prism' (TemplateFix normalization Atom a) [a]
+_In = L.prism' (fixFunction . In) ripIn
+  where ripIn :: (TemplateFix normalization level a) -> Maybe [a]
+        ripIn (FixAny (In xs)) = Just xs
+        ripIn (FixLevel (In xs)) = Just xs
         ripIn _ = Nothing

@@ -37,7 +37,8 @@ instance (Eq (f (g x))) => Eq (Compose f g x) where
 -- | A newtype for JSON-encoding OnpingTagCombined records
 newtype OnpingTagCombinedJSON = OnpingTagCombinedJSON { _onpingTagCombinedJSON :: OnpingTagCombined }
 
-makeLenses ''OnpingTagCombinedJSON
+onpingTagCombinedJSON :: Iso' OnpingTagCombinedJSON OnpingTagCombined
+onpingTagCombinedJSON = iso _onpingTagCombinedJSON OnpingTagCombinedJSON
 
 -- | Fields for the Named record
 type family NamedField a (field :: Symbol) where
@@ -48,7 +49,8 @@ type family NamedField a (field :: Symbol) where
 newtype NamedAttr a (field :: Symbol) = NamedAttr { _namedAttr :: NamedField a field }
 deriving instance (Eq (NamedField a field)) => Eq (NamedAttr a field)
 
-makeLenses ''NamedAttr
+namedAttr :: Iso' (NamedAttr a field) (NamedField a field)
+namedAttr = iso _namedAttr NamedAttr
 
 -- | The Named record
 type Named a = Rec (NamedAttr a) '["name", "record"]
@@ -57,10 +59,14 @@ type Named a = Rec (NamedAttr a) '["name", "record"]
 newtype NamedJSON a = NamedJSON { _namedJSON :: Named a }
 deriving instance (Eq (Named a)) => Eq (NamedJSON a)
 
-makeLenses ''NamedJSON
+namedJSON :: Iso' (NamedJSON a) (Named a)
+namedJSON = iso _namedJSON NamedJSON
 
 -- | A newtype for JSON-encoding OnpingTagCombinedTemplate records
 newtype OnpingTagCombinedTemplateJSON = OnpingTagCombinedTemplateJSON { _onpingTagCombinedTemplateJSON :: OnpingTagCombinedTemplate }
+
+onpingTagCombinedTemplateJSON :: Iso' OnpingTagCombinedTemplateJSON OnpingTagCombinedTemplate
+onpingTagCombinedTemplateJSON = iso _onpingTagCombinedTemplateJSON OnpingTagCombinedTemplateJSON
 
 instance Eq OnpingTagCombinedTemplateJSON where
   (OnpingTagCombinedTemplateJSON a) == (OnpingTagCombinedTemplateJSON b) = (eqReqOn (Proxy :: Proxy "location_id") a b)
@@ -82,13 +88,12 @@ instance Eq OnpingTagCombinedTemplateJSON where
 
 
 
-eqReqOn :: (RElem r OnpingTagCombinedFields (RIndex r OnpingTagCombinedFields), RElem r OnpingTagCombinedFields (RIndex r OnpingTagCombinedFields), (Eq (OnpingTagCombinedField r))) 
+eqReqOn :: (RElem r OnpingTagCombinedFields (RIndex r OnpingTagCombinedFields), (Eq (OnpingTagCombinedField r))) 
     => sing r 
     -> Rec (TemplatesFor Normalized Disjunction OnpingTagCombinedAttr) OnpingTagCombinedFields 
     -> Rec (TemplatesFor Normalized Disjunction OnpingTagCombinedAttr) OnpingTagCombinedFields -> Bool
 eqReqOn rl template1 template2 = (getCompose $ template1 ^. (rlens rl)) == (getCompose $ template2 ^. (rlens rl))
 
-makeLenses ''OnpingTagCombinedTemplateJSON
 
 -- | The Servant API for validation
 type OnpingTagCombinedValidatorAPI =

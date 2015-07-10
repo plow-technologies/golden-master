@@ -9,6 +9,7 @@
 module Plowtech.Records.OnpingTagCombined where
 
 import Control.Applicative
+import Control.Lens hiding ((.=))
 import Control.Lens.TH
 import Data.Aeson
 import Data.Master.Template
@@ -70,7 +71,8 @@ instance (ToJSON (OnpingTagCombinedField field)) => ToJSON (OnpingTagCombinedAtt
 instance (FromJSON (OnpingTagCombinedField field)) => FromJSON (OnpingTagCombinedAttr field) where
   parseJSON value = OnpingTagCombinedAttr <$> parseJSON value
 
-makeLenses ''OnpingTagCombinedAttr
+onpingTagCombinedAttr :: Iso' (OnpingTagCombinedAttr field) (OnpingTagCombinedField field)
+onpingTagCombinedAttr = iso _onpingTagCombinedAttr OnpingTagCombinedAttr
 
 type OnpingTagCombinedFields = [ "location_id"
                                , "slave_parameter_id"
