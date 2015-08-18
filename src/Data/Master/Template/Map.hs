@@ -42,6 +42,9 @@ instance FromJSON a => FromJSON (Has a) where
   parseJSON = withObject "Has must be an object"
               (\obj -> (Has <$> obj .: "has") <|> (fromUnit DoesNotHave <$> obj .: "doesnothave" ))
 
+instance Functor Has where
+  fmap f = has DoesNotHave (Has . f)
+
 data MapCheckResult template a result = Missing template | Excluded a | Found result | Gone deriving (Eq, Ord, Read, Show)
 
 instance (ToJSON template, ToJSON a, ToJSON result) => ToJSON (MapCheckResult template a result) where

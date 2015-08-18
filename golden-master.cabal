@@ -20,7 +20,7 @@ library
                        Data.Master.Template.Vinyl
                        Data.Master.Template.Map
                        Data.Master.Template.Class
-                       -- Data.Master.Examples
+                       Data.Master.Examples
                        Data.Vinyl.Aeson
   -- other-modules:       
   build-depends:       base >=4.7 && <4.9

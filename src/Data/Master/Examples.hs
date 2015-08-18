@@ -13,34 +13,57 @@
 {-# LANGUAGE TypeFamilies #-}
 -- For mapping constraints over things
 {-# LANGUAGE ConstraintKinds #-}
+-- For RecAll constraints
+{-# LANGUAGE UndecidableInstances #-}
+-- For passing type params around explicitly
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Data.Master.Examples (generateExamples, generateRecordExamples) where
 
-import Data.List
-import Data.Master.Template
-import Data.Vinyl.Core
-import Data.Vinyl.Functor
-import Data.Vinyl.TypeLevel
+import           Data.List
+import           Data.Map (Map)
+import qualified Data.Map as Map
+import           Data.Master.Template.Class
+import qualified Data.Master.Template.Vinyl as T (Template)
+import           Data.Master.Template.Vinyl hiding (Template)
+import           Data.Master.Template.Map
+import           Data.Proxy (Proxy(..))
+import           Data.Vinyl.Core
+import           Data.Vinyl.Functor
+import           Data.Vinyl.TypeLevel
+
+class (Checkable a) => Generatable a where
+  type Examples a
+  generateExamples :: proxy a -> Template a -> Examples a
+
+instance (RecAll f fields Eq, RecAll f fields Bounded, RecAll f fields Enum) => Generatable (Rec f fields) where
+  type Examples (Rec f fields) = Rec (Compose [] f) fields
+  generateExamples = const generateRecordExamples
+
+instance (Ord k, Generatable v) => Generatable (Map k v) where
+  type Examples (Map k v) = Map k (Has (Examples v))
+  generateExamples = const $ Map.map $ fmap $ generateExamples (Proxy :: Proxy v)
+      
 
 -- | Generate the list of examples for a single template
-generateExamples :: (Eq a, Bounded a, Enum a) => Template Normalized level a -> [a]
-generateExamples Meh = allExamples
-generateExamples (Eq x) = [x]
-generateExamples (Lt x) = case reverse $ enumFromTo minBound x of
+generateTemplateExamples :: (Eq a, Bounded a, Enum a) => T.Template Normalized level a -> [a]
+generateTemplateExamples Meh = allExamples
+generateTemplateExamples (Eq x) = [x]
+generateTemplateExamples (Lt x) = case reverse $ enumFromTo minBound x of
                        [] -> []
                        (_ : examples) -> reverse examples
-generateExamples (Gt x) = case enumFromTo x maxBound of
+generateTemplateExamples (Gt x) = case enumFromTo x maxBound of
                        [] -> []
                        (_ : examples) -> examples
-generateExamples (In xs) = xs
-generateExamples (Not (FixLevel template)) = allExamples \\ generateExamples template
-generateExamples (And templates) = foldr union [] $ map (generateExamples . unFixLevel) templates
-generateExamples (Or templates) = foldr intersect [] $ map (generateExamples . unFixLevel) templates
+generateTemplateExamples (In xs) = xs
+generateTemplateExamples (Not (FixLevel template)) = allExamples \\ generateTemplateExamples template
+generateTemplateExamples (And templates) = foldr union [] $ map (generateTemplateExamples . unFixLevel) templates
+generateTemplateExamples (Or templates) = foldr intersect [] $ map (generateTemplateExamples . unFixLevel) templates
 
 -- | Generate a record with lists of examples for each field
 generateRecordExamples :: (RecAll f fields Eq, RecAll f fields Bounded, RecAll f fields Enum) => Rec (TemplatesFor Normalized level f) fields -> Rec (Compose [] f) fields
 generateRecordExamples RNil = RNil
-generateRecordExamples ((Compose template) :& templateRecord) = (Compose $ generateExamples template) :& generateRecordExamples templateRecord
+generateRecordExamples ((Compose template) :& templateRecord) = (Compose $ generateTemplateExamples template) :& generateRecordExamples templateRecord
 
 allExamples :: (Bounded a, Enum a) => [a]
 allExamples = enumFromTo minBound maxBound
