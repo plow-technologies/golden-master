@@ -26,6 +26,8 @@ instance (Ord k, Checkable v) => Checkable (Map k v) where
     Map.mapWithKey (\key template -> case (template, Map.lookup key candidateMap) of
                                        (Has template, Just candidate) -> Found $ checkTemplate template candidate
                                        (Has template, Nothing) -> Missing template
+                                       (MaybeHas template, Just candidate) -> Found $ checkTemplate template candidate
+                                       (MaybeHas _, Nothing) -> Gone
                                        (DoesNotHave, Just candidate) -> Excluded candidate
                                        (DoesNotHave, Nothing) -> Gone) templateMap
   success _ = Map.foldr (&&) True . Map.map success'
