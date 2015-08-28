@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Data.Master.Template.Map where
 
-import           Control.Applicative ((<|>))
+import           Control.Applicative ((<|>),(<$>))
 import           Control.Lens.Iso
 import           Control.Lens ((^.))
 import           Data.Aeson
