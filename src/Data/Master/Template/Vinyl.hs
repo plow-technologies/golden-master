@@ -17,6 +17,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Data.Master.Template.Vinyl
   (
   -- * Data Kinds
@@ -33,6 +34,8 @@ module Data.Master.Template.Vinyl
   , compileTemplateBox
   , compileTemplate
   , checkTemplates
+  , MaybeComposite(..)
+  , CompositeMaybe(..)
 
   -- * Lenses and prisms
   , templateFixNormalized
@@ -50,15 +53,19 @@ module Data.Master.Template.Vinyl
   )
 where
 
-import Data.Aeson
-import Data.Aeson.Types
-import Control.Monad
-import Control.Applicative ((<$>), (<|>))
+import           Control.Applicative ((<$>), (<|>))
+import           Control.Monad
 import qualified Control.Lens as L
-
-import Data.Vinyl.Core
-import Data.Vinyl.Functor
-import GHC.TypeLits
+import           Data.Aeson
+import           Data.Aeson.Types
+import           Data.Bits (testBit, setBit, finiteBitSize)
+import           Data.Maybe (listToMaybe)
+import           Data.Monoid (All(..))
+import           Data.Text (Text())
+import qualified Data.Text as T
+import           Data.Vinyl.Core
+import           Data.Vinyl.Functor
+import           GHC.TypeLits
 
 -- | Take apart an or
 unOr :: Template Normalized Disjunction a -> [TemplateFix Normalized Conjunction a]
@@ -90,6 +97,8 @@ checkTemplate x (Eq y) = x == y
 checkTemplate x (Lt y) = x < y
 checkTemplate x (Gt y) = x > y
 checkTemplate x (In y) = x `elem` y
+checkTemplate x (ComposedOf compose decompose (FixAny t)) = and $ map (flip checkTemplate t) $ decompose x
+checkTemplate x (ComposedOf compose decompose (FixLevel t)) = and $ map (flip checkTemplate t) $ decompose x
 checkTemplate x (And []) = True
 checkTemplate x (And conjs@(FixAny _ : _)) = and $ map (unFixAny $ checkTemplate x) conjs
 checkTemplate x (And conjs@(FixLevel _ : _)) = and $ map (checkTemplate x . unFixLevel) conjs
@@ -137,6 +146,7 @@ eqHelper (Gt a) (Gt b) = a == b
 eqHelper (In a) (In b) = a == b
 eqHelper (And a) (And b) = a == b
 eqHelper (Or a) (Or b) = a == b
+eqHelper (ComposedOf _ _ a) (ComposedOf _ _ b) = False
 eqHelper _ _ = False
 
 -- | Templates
@@ -147,6 +157,7 @@ data Template (norm :: Normalization) (level :: TemplateLevel) (a :: *) where
   Lt  :: (Ord a) => a                       -> Template norm Atom a
   Gt  :: (Ord a) => a                       -> Template norm Atom a
   In  :: (Eq a)  => [a]                     -> Template norm Atom a
+  ComposedOf :: (Eq c, Ord c, ToJSON c) => ([c] -> a) -> (a -> [c]) -> TemplateFix norm Disjunction c -> Template norm Atom a
   And :: [TemplateFix norm Atom a]        -> Template norm Conjunction a
   Or  :: [TemplateFix norm Conjunction a] -> Template norm Disjunction a
 
@@ -167,6 +178,7 @@ compileTemplate (Eq x)                = Or [FixLevel $ And [FixLevel $ Eq x]]
 compileTemplate (Lt x)                = Or [FixLevel $ And [FixLevel $ Lt x]]
 compileTemplate (Gt x)                = Or [FixLevel $ And [FixLevel $ Gt x]]
 compileTemplate (In x)                = Or [FixLevel $ And [FixLevel $ In x]]
+compileTemplate (ComposedOf compose decompose (FixAny t)) = Or [FixLevel $ And [FixLevel $ ComposedOf compose decompose $ FixLevel $ compileTemplate t]]
 compileTemplate (And fixes)           = foldr distributeOrsAnd (Or [FixLevel $ And [FixLevel Meh]]) $ map (unFixAny compileTemplate) fixes  
 compileTemplate (Or fixes)            = Or $ concatMap (unFixAny $ unOr . compileTemplate) fixes
 
@@ -178,6 +190,7 @@ pushDownNots k (Eq x)           = k $ Not $ FixAny $ Eq x
 pushDownNots k (Lt x)           = k $ Not $ FixAny $ Lt x
 pushDownNots k (Gt x)           = k $ Not $ FixAny $ Gt x
 pushDownNots k (In x)           = k $ Not $ FixAny $ In x
+pushDownNots k (ComposedOf compose decompose (FixAny t)) = k $ ComposedOf compose decompose $ FixAny $ Not $ FixAny t
 pushDownNots k (And fixes)      = k $ Or $ map (unFixAny $ pushDownNots FixAny) fixes
 pushDownNots k (Or fixes)       = k $ And $ map (unFixAny $ pushDownNots FixAny) fixes
 
@@ -199,9 +212,15 @@ weakenTemplate Meh = TemplateBox Meh
 weakenTemplate (Eq x) = TemplateBox $ Eq x
 weakenTemplate (Not (FixAny t)) = case weakenTemplate t of
                            TemplateBox t -> TemplateBox $ Not $ FixAny t
+weakenTemplate (Not (FixLevel t)) = case weakenTemplate t of
+                                     TemplateBox t -> TemplateBox $ Not $ FixAny t
 weakenTemplate (Lt x) = TemplateBox $ Lt x
 weakenTemplate (Gt x) = TemplateBox $ Gt x
 weakenTemplate (In xs) = TemplateBox $ In xs
+weakenTemplate (ComposedOf compose decompose (FixAny t)) = case weakenTemplate t of
+                                                             TemplateBox t -> TemplateBox $ ComposedOf compose decompose $ FixAny t
+weakenTemplate (ComposedOf compose decompose (FixLevel t)) = case weakenTemplate t of
+                                                               TemplateBox t -> TemplateBox $ ComposedOf compose decompose $ FixAny t
 weakenTemplate (And []) = TemplateBox $ And []
 weakenTemplate (And ts@(FixAny _ : _)) = TemplateBox $ And $ ripTemplates (map (unFixAny weakenTemplate) ts) FixAny
 weakenTemplate (And ts@(FixLevel _ : _)) = TemplateBox $ And $ ripTemplates (map (weakenTemplate . unFixLevel) ts) FixAny
@@ -216,7 +235,7 @@ compileTemplateBox (TemplateBox t) = compileTemplate t
 instance (ToJSON a) => ToJSON (Template Normalized Disjunction a) where
   toJSON = toJSON . weakenTemplate
 
-instance (FromJSON a, Eq a, Ord a) => FromJSON (Template Normalized Disjunction a) where
+instance (ToJSON a, FromJSON a, Eq a, Ord a, MaybeComposite a) => FromJSON (Template Normalized Disjunction a) where
   parseJSON = (compileTemplateBox <$>) . parseJSON
 
 data TemplateBox a = forall level. TemplateBox { _templateBox :: Template Unnormalized level a }
@@ -240,16 +259,17 @@ instance (ToJSON a) => ToJSON (TemplateBox a) where
   toJSON (TemplateBox (Lt val)) = object ["Lt" .= val]
   toJSON (TemplateBox (Gt val)) = object ["Gt" .= val]
   toJSON (TemplateBox (In xs)) = object ["In" .= xs]
+  toJSON (TemplateBox (ComposedOf _ _ t)) = object ["ComposedOf" .= TemplateFixBox t]
   toJSON (TemplateBox (And ts)) = object ["And" .= fmap TemplateFixBox ts]
   toJSON (TemplateBox (Or ts)) = object ["Or" .= fmap TemplateFixBox ts]
 
-instance (FromJSON a, Eq a, Ord a) => FromJSON (TemplateBox a) where
+instance (ToJSON a, FromJSON a, Eq a, Ord a, MaybeComposite a) => FromJSON (TemplateBox a) where
   parseJSON o = parseEq o <|> parseNot o <|> parseLt o
             <|> parseGt o <|> parseIn o <|> parseAnd o
-            <|> parseOr o <|> parseMeh o
+            <|> parseOr o <|> parseMeh o <|> parseComposedOf o
 
 parseEq, parseNot, parseLt, parseGt, 
-  parseIn, parseAnd, parseOr, parseMeh :: (FromJSON a, Ord a, Eq a) => Value -> Parser (TemplateBox a)
+  parseIn, parseAnd, parseOr, parseMeh, parseComposedOf :: forall a . (FromJSON a, ToJSON a, Ord a, Eq a, MaybeComposite a) => Value -> Parser (TemplateBox a)
 parseEq (Object o) = do
   value <- (o .: "Eq")
   return $ TemplateBox $ Eq value
@@ -282,6 +302,14 @@ parseMeh (Object o) = do
   () <- o .: "Meh"
   return $ TemplateBox $ Meh
 parseMeh _ = mzero
+parseComposedOf (Object o) 
+  = case (maybeComposite :: CompositeMaybe a (HasComposite a)) of
+      CompositeNothing -> mzero
+      CompositeJust fromComposite toComposite ->
+        flip fmap (o .: "ComposedOf")
+        (\tb -> case tb of
+          (TemplateBox t) -> TemplateBox $ ComposedOf fromComposite toComposite $ FixAny t)
+parseComposedOf _ = mzero
 
 
 ripTemplates :: [TemplateBox a] -> (forall level. Template Unnormalized level a -> k) -> [k]
@@ -299,6 +327,36 @@ instance Fixable Normalized where
 
 instance Fixable Unnormalized where
   fixFunction = FixAny
+
+data CompositeMaybe a (b :: Maybe *) where
+  CompositeJust :: (Eq b, Ord b, MaybeComposite b, ToJSON b, FromJSON b) => ([b] -> a) -> (a -> [b]) -> CompositeMaybe a (Just b)
+  CompositeNothing :: CompositeMaybe a b
+
+class MaybeComposite a where
+  type HasComposite a :: Maybe *
+  maybeComposite :: CompositeMaybe a (HasComposite a)
+
+instance MaybeComposite Text where
+  type HasComposite Text = Just Char
+  maybeComposite = CompositeJust T.pack T.unpack
+
+instance MaybeComposite Char where
+  type HasComposite Char = Nothing
+  maybeComposite = CompositeNothing
+
+instance MaybeComposite Word where
+  type HasComposite Word = Just Bool
+  maybeComposite = CompositeJust fromBits toBits
+    where
+      bitPositions = [0..finiteBitSize (0 :: Word) - 1]
+      toBits :: Word -> [Bool]
+      toBits word = reverse $ dropWhile not $ reverse $ map (testBit word) bitPositions
+      fromBits :: [Bool] -> Word
+      fromBits bits = foldr (\(bit, bitPosition) -> if bit then flip setBit bitPosition else id) 0 (zip bits bitPositions)
+
+instance MaybeComposite Bool where
+  type HasComposite Bool = Nothing
+  maybeComposite = CompositeNothing
 
 -- | Isomorphism between TemplateFix unnormalized at differing levels. Use when applying a prism to Unnormalized boxes.
 fixAnyLevelIso :: L.Iso' (TemplateFix Unnormalized level1 a) (TemplateFix Unnormalized level2 a)
