@@ -46,7 +46,7 @@ instance (Ord k, Generatable v) => Generatable (Map k v) where
   type Examples (Map k v) = Map k (Has (Examples v))
   generateExamples = const $ Map.map $ fmap $ generateExamples (Proxy :: Proxy v)
 
-data Bound a = Unbounded | Exclusive a | Inclusive a
+data Bound a = Unbounded | Exclusive a | Inclusive a deriving (Eq, Show, Ord)
 
 data Bounds a
   = Bounds
@@ -54,6 +54,7 @@ data Bounds a
       , _lowerBound :: Bound a
       }
   | UnionBounds { _boundsUnion :: [Bounds a] }
+  deriving (Eq, Show, Ord)
 
 -- | pick from arguments based on an Ordering
 withOrdering :: Ordering -> a -> a -> a -> a
@@ -111,7 +112,7 @@ generateBoundsExamples :: (Eq a, Ord a, Enum a) => Bounds a -> [a]
 generateBoundsExamples (Bounds upperBound lowerBound) = 
   let
     lower = exclude succ lowerBound
-    upper = exclude pred lowerBound
+    upper = exclude pred upperBound
   in maybe (maybe [toEnum 0] (:[]) lower) (\upperBound -> maybe [upperBound] (\lowerBound -> enumFromTo lowerBound upperBound) lower) upper
 generateBoundsExamples (UnionBounds bounds) = foldr union [] $ map generateBoundsExamples bounds
 
