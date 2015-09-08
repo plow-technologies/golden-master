@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                golden-master
-version:             0.2.1.0
+version:             0.3.0.0
 -- synopsis:            
 -- description:         
 -- license:             
@@ -16,7 +16,8 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Data.Master.Template
+  exposed-modules:     Data.BigEnum
+                       Data.Master.Template
                        Data.Master.Template.Vinyl
                        Data.Master.Template.Map
                        Data.Master.Template.Class

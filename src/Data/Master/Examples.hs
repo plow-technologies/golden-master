@@ -20,6 +20,7 @@
 
 module Data.Master.Examples (Generatable(..)) where
 
+import           Data.BigEnum
 import           Data.List
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -38,7 +39,7 @@ class (Checkable a) => Generatable a where
   type Examples a
   generateExamples :: proxy a -> Template a -> Examples a
 
-instance (RecAll f fields Eq, RecAll f fields Ord, RecAll f fields Enum) => Generatable (Rec f fields) where
+instance (RecAll f fields Eq, RecAll f fields Ord, RecAll f fields BigEnum) => Generatable (Rec f fields) where
   type Examples (Rec f fields) = Rec (Compose [] f) fields
   generateExamples = const generateRecordExamples
 
@@ -108,22 +109,22 @@ exclude _ Unbounded     = Nothing
 exclude f (Exclusive x) = Just $ f x
 exclude _ (Inclusive x) = Just $ x
 
-generateBoundsExamples :: (Eq a, Ord a, Enum a) => Bounds a -> [a]
+generateBoundsExamples :: (Eq a, Ord a, BigEnum a) => Bounds a -> [a]
 generateBoundsExamples (Bounds upperBound lowerBound) = 
   let
-    lower = exclude succ lowerBound
-    upper = exclude pred upperBound
-  in maybe (maybe [toEnum 0] (:[]) lower) (\upperBound -> maybe [upperBound] (\lowerBound -> enumFromTo lowerBound upperBound) lower) upper
+    lower = exclude bigSucc lowerBound
+    upper = exclude bigPred upperBound
+  in maybe (maybe [toBigEnum 0] (:[]) lower) (\upperBound -> maybe [upperBound] (\lowerBound -> bigEnumFromTo lowerBound upperBound) lower) upper
 generateBoundsExamples (UnionBounds bounds) = foldr union [] $ map generateBoundsExamples bounds
 
--- | Constraint: Ord and Enum instance are compatible
+-- | Constraint: Ord and BigEnum instance are compatible
 -- This will not generate all examples. In particular, in cases where a template leaves
 -- a range singly or doubly unbounded it will generate only one example
-generateTemplateExamples :: (Eq a, Ord a, Enum a) => T.Template Normalized level a -> [a]
+generateTemplateExamples :: (Eq a, Ord a, BigEnum a) => T.Template Normalized level a -> [a]
 generateTemplateExamples = generateBoundsExamples . findTemplateBounds
 
 -- | Generate a record with lists of examples for each field
-generateRecordExamples :: (RecAll f fields Eq, RecAll f fields Ord, RecAll f fields Enum) => Rec (TemplatesFor Normalized level f) fields -> Rec (Compose [] f) fields
+generateRecordExamples :: (RecAll f fields Eq, RecAll f fields Ord, RecAll f fields BigEnum) => Rec (TemplatesFor Normalized level f) fields -> Rec (Compose [] f) fields
 generateRecordExamples RNil = RNil
 generateRecordExamples ((Compose template) :& templateRecord) = (Compose $ generateTemplateExamples template) :& generateRecordExamples templateRecord
 
